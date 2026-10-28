@@ -1,0 +1,21 @@
+# Budowanie
+build-env/
+build/
+dist/
+instalator/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# System
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Testy: plik z wirtualnymi ekranami (tworzony przez tests/conftest.py)
+.test_screens.json
+*.log

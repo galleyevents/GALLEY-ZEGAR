@@ -1,0 +1,11 @@
+# Domyślnie: pliki tekstowe z normalizacją końców linii
+* text=auto
+
+# Pliki .bat muszą mieć końce linii CRLF (inaczej cmd.exe źle je czyta)
+*.bat text eol=crlf
+# Skrypt Inno Setup (UTF-8 z BOM) zostawiamy w formacie Windows
+*.iss text eol=crlf
+
+# Pliki binarne
+*.png binary
+*.ico binary
