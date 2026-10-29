@@ -165,3 +165,44 @@ def test_przebudowa_presetow_nie_zostawia_przyciskow(app, zegar):
     pump(app, 0.1)
     shown = [b.text() for b in zegar.findChildren(QPushButton) if b.isVisibleTo(zegar) and b.objectName() == "Preset"]
     assert sorted(shown) == sorted(["5 min", "10 min", "15 min", "30 min"])
+
+
+def test_koncowka_od_kiedy_i_kolory(app, zegar):
+    """1.2: od ilu minut przed końcem zmienia się kolor, kolor końcówki i kolor po czasie - do wyboru."""
+    from galley_zegar import app as z
+    m = zegar.model
+    zegar.apply_preset(10)
+    zegar.btn_start.click()
+    m.watch.adjust(6 * 60_000)                                          # zostały 4 min
+    assert m.display()[2] == "normal"                                   # domyślnie końcówka od 2 min
+    zegar.sp_warn.setValue(5)                                           # końcówka od 5 min
+    assert m.display()[2] == "warn"
+    zegar.cb_warn_color.setCurrentIndex(1)                              # pomarańczowy
+    zegar._pick_color("warn_color", zegar.cb_warn_color)
+    assert z.clock_color(zegar.opt, "warn", True, True) == QColor("#F08A24")
+    m.watch.adjust(5 * 60_000)                                          # po czasie
+    assert m.display()[2] == "over"
+    assert z.clock_color(zegar.opt, "over", True, True) == QColor(z.OVER)
+    zegar.cb_over_color.setCurrentIndex(3)                              # biały po czasie
+    zegar._pick_color("over_color", zegar.cb_over_color)
+    assert z.clock_color(zegar.opt, "over", True, True) == QColor("#FFFFFF")
+    opt = z.load_options()                                              # zapamiętane
+    assert opt["warn_min"] == 5 and opt["warn_color"] == "#F08A24" and opt["over_color"] == "#FFFFFF"
+    zegar.sp_warn.setValue(0)                                           # bez końcówki
+    m.watch.reset()
+    m.watch.adjust(9 * 60_000 + 50_000)                                 # 10 s do końca
+    assert m.display()[2] == "normal" and zegar.sp_warn.text() == "bez końcówki"
+    zegar.cb_warn.setChecked(False)                                     # wyłączone kolory: wybór szary
+    assert not zegar.sp_warn.isEnabled() and not zegar.cb_warn_color.isEnabled()
+    zegar.r_up.setChecked(True)                                         # w górę: końcówka bez znaczenia
+    assert not zegar.cb_warn.isEnabled()
+
+
+def test_zly_zapis_kolorow_koncowki(app):
+    from galley_zegar import app as z
+    s = z.settings()
+    s.setValue("warn_color", "nie-kolor")
+    s.setValue("warn_min", 999)
+    opt = z.load_options()
+    assert opt["warn_color"] == z.WARN and opt["warn_min"] == 60
+    s.clear()

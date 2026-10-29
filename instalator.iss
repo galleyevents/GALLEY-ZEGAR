@@ -2,7 +2,7 @@
 ; Wymaga wcześniejszego zbudowania programu (dist\GalleyZegar) przez PyInstaller (zegar.spec).
 
 #define AppName "GALLEY Zegar"
-#define AppVersion "1.1"
+#define AppVersion "1.2"
 #define AppExe "GalleyZegar.exe"
 
 [Setup]

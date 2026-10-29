@@ -30,11 +30,15 @@ BACKGROUNDS = (("Zielony – do kluczowania", "#00B140"), ("Niebieski – do klu
                ("Czarny", "#000000"))
 DIGITS = (("Białe", "#FFFFFF"), ("Czarne", "#000000"), ("Złote", "#D9A441"))
 WARN, OVER = "#F5C451", "#E5484D"    # jak na stronie zegara w sieci (3.13) - bez zielonego (kluczowanie)
+# 1.2 (prośba właściciela): od kiedy i na jaki kolor zmienia się zegar pod koniec oraz kolor po czasie
+WARN_COLORS = (("Żółty", WARN), ("Pomarańczowy", "#F08A24"), ("Czerwony", OVER), ("Biały", "#FFFFFF"))
+OVER_COLORS = (("Czerwony", OVER), ("Pomarańczowy", "#F08A24"), ("Żółty", WARN), ("Biały", "#FFFFFF"))
 BLINK_MS = 800                       # po czasie: jasne / przygaszone co tyle
 TICK_MS = 100                        # odświeżanie (sekundy zmieniają się równo)
 
 DEFAULTS = {"mode": "down", "limit_min": 15, "overtime": True, "bg": BACKGROUNDS[0][1],
-            "fg": DIGITS[0][1], "size": 34, "warn": True, "caption": False, "screen": ""}
+            "fg": DIGITS[0][1], "size": 34, "warn": True, "caption": False, "screen": "",
+            "warn_min": 2, "warn_color": WARN, "over_color": OVER}
 
 
 # 1.1 (prośba właściciela): gotowe czasy jednym kliknięciem + własne presety (zapamiętane)
@@ -89,19 +93,21 @@ def load_options():
     o["mode"] = o["mode"] if o["mode"] in ("up", "down") else "down"
     o["limit_min"] = max(1, min(600, o["limit_min"]))
     o["size"] = max(10, min(60, o["size"]))
-    for key in ("bg", "fg"):
+    o["warn_min"] = max(0, min(60, o["warn_min"]))
+    for key in ("bg", "fg", "warn_color", "over_color"):
         if not QColor(o[key]).isValid():
             o[key] = DEFAULTS[key]
     return o
 
 
 def clock_color(opt, state, running, blink_on):
-    """Kolor cyfr: zwykły, żółty (ostatnie 2 min), czerwony (po czasie - przygaszony co drugi takt)."""
+    """Kolor cyfr: zwykły, kolor końcówki (domyślnie żółty, ostatnie 2 min), kolor po czasie (domyślnie
+    czerwony - przygaszony co drugi takt, gdy zegar liczy na minusie)."""
     if not opt["warn"] or state == "normal":
         return QColor(opt["fg"])
     if state == "warn":
-        return QColor(WARN)
-    color = QColor(OVER)
+        return QColor(opt.get("warn_color", WARN))
+    color = QColor(opt.get("over_color", OVER))
     if state == "over" and running and not blink_on:
         # mruganie BEZ przezroczystości: półprzezroczyste cyfry mieszałyby się z tłem do kluczowania
         color = color.darker(170)
@@ -151,7 +157,7 @@ class ClockModel:
 
     def display(self):
         return timer_display(self.watch.elapsed_ms(), self.opt["mode"], self.opt["limit_min"] * 60000,
-                             self.opt["overtime"])
+                             self.opt["overtime"], self.opt.get("warn_min", 2) * 60000)
 
     def toggle(self):
         (self.watch.pause if self.watch.running else self.watch.start)()
@@ -344,11 +350,41 @@ class ClockWindow(QMainWindow):
         self.sl_size.valueChanged.connect(self._options_changed)
         grid.addWidget(self.sl_size, 2, 1)
         right.addLayout(grid)
-        self.cb_warn = QCheckBox("Ostrzeżenia: ostatnie 2 minuty na żółto, po czasie na czerwono")
         self.cb_caption = QCheckBox("Podpis nad zegarem („Pozostało”, „Po czasie”)")
-        for c in (self.cb_warn, self.cb_caption):
-            c.toggled.connect(self._options_changed)
-            right.addWidget(c)
+        self.cb_caption.toggled.connect(self._options_changed)
+        right.addWidget(self.cb_caption)
+
+        # 1.2: końcówka (od kiedy, jaki kolor) i kolor po czasie - przy odliczaniu
+        right.addSpacing(10)
+        right.addWidget(label("Koniec czasu (odliczanie)", "Section"))
+        self.cb_warn = QCheckBox("Zmiana koloru zegara pod koniec i po czasie")
+        self.cb_warn.toggled.connect(self._options_changed)
+        right.addWidget(self.cb_warn)
+        wgrid = QGridLayout()
+        wgrid.setHorizontalSpacing(8)
+        wgrid.addWidget(label("Końcówka od:"), 0, 0)
+        self.sp_warn = QSpinBox()
+        self.sp_warn.setRange(0, 60)
+        self.sp_warn.setSuffix(" min przed końcem")
+        self.sp_warn.setSpecialValueText("bez końcówki")
+        self.sp_warn.setToolTip("Ile minut przed końcem zegar zmienia kolor (0 = dopiero po czasie)")
+        self.sp_warn.valueChanged.connect(self._options_changed)
+        wgrid.addWidget(self.sp_warn, 0, 1)
+        wgrid.addWidget(label("Kolor końcówki:"), 1, 0)
+        self.cb_warn_color = QComboBox()
+        for name, value in WARN_COLORS:
+            self.cb_warn_color.addItem(name, value)
+        self.cb_warn_color.addItem("Inny kolor…", "")
+        self.cb_warn_color.activated.connect(lambda _i: self._pick_color("warn_color", self.cb_warn_color))
+        wgrid.addWidget(self.cb_warn_color, 1, 1)
+        wgrid.addWidget(label("Kolor po czasie:"), 2, 0)
+        self.cb_over_color = QComboBox()
+        for name, value in OVER_COLORS:
+            self.cb_over_color.addItem(name, value)
+        self.cb_over_color.addItem("Inny kolor…", "")
+        self.cb_over_color.activated.connect(lambda _i: self._pick_color("over_color", self.cb_over_color))
+        wgrid.addWidget(self.cb_over_color, 2, 1)
+        right.addLayout(wgrid)
 
         right.addSpacing(10)
         right.addWidget(label("Ekran zegara", "Section"))
@@ -370,7 +406,7 @@ class ClockWindow(QMainWindow):
 
     def _sync_controls(self):
         o = self.opt
-        for w in (self.r_up, self.sp_min, self.cb_over, self.sl_size, self.cb_warn, self.cb_caption):
+        for w in (self.r_up, self.sp_min, self.cb_over, self.sl_size, self.cb_warn, self.cb_caption, self.sp_warn):
             w.blockSignals(True)
         (self.r_down if o["mode"] == "down" else self.r_up).setChecked(True)
         self.sp_min.setValue(o["limit_min"])
@@ -378,13 +414,14 @@ class ClockWindow(QMainWindow):
         self.sl_size.setValue(o["size"])
         self.cb_warn.setChecked(o["warn"])
         self.cb_caption.setChecked(o["caption"])
-        for w in (self.r_up, self.sp_min, self.cb_over, self.sl_size, self.cb_warn, self.cb_caption):
+        self.sp_warn.setValue(o["warn_min"])
+        for w in (self.r_up, self.sp_min, self.cb_over, self.sl_size, self.cb_warn, self.cb_caption, self.sp_warn):
             w.blockSignals(False)
         self._select_color(self.cb_bg, o["bg"])
         self._select_color(self.cb_fg, o["fg"])
-        down = o["mode"] == "down"
-        self.sp_min.setEnabled(down)
-        self.cb_over.setEnabled(down)
+        self._select_color(self.cb_warn_color, o["warn_color"])
+        self._select_color(self.cb_over_color, o["over_color"])
+        self._enable_controls()
         self._mark_preset()
         self._update_views()
 
@@ -492,10 +529,21 @@ class ClockWindow(QMainWindow):
         o["size"] = self.sl_size.value()
         o["warn"] = self.cb_warn.isChecked()
         o["caption"] = self.cb_caption.isChecked()
-        self.sp_min.setEnabled(o["mode"] == "down")
-        self.cb_over.setEnabled(o["mode"] == "down")
+        o["warn_min"] = self.sp_warn.value()
+        self._enable_controls()
         self._mark_preset()
         self._save()
+
+    def _enable_controls(self):
+        """Ustawienia odliczania i koloru końcówki aktywne tylko wtedy, gdy mają znaczenie."""
+        down = self.opt["mode"] == "down"
+        self.sp_min.setEnabled(down)
+        self.cb_over.setEnabled(down)
+        self.cb_warn.setEnabled(down)
+        colors = down and self.opt["warn"]
+        for w in (self.sp_warn, self.cb_warn_color):
+            w.setEnabled(colors)
+        self.cb_over_color.setEnabled(colors)
 
     def _save(self):
         s = settings()

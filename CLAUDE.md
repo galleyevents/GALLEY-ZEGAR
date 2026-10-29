@@ -6,7 +6,7 @@ ekranie na jednolitym tle do kluczowania. Zbudowany na bazie zegara z repozytori
 z własnym instalatorem i repozytorium - NIE tryb Presentera (próba jako `--zegar` w Presenterze, 3.14-beta.5,
 została wycofana).
 
-Aktualna wersja: **1.1** (`galley_zegar/__init__.py` `APP_VERSION` i `#define AppVersion` w `instalator.iss` - zawsze obie).
+Aktualna wersja: **1.2** (`galley_zegar/__init__.py` `APP_VERSION` i `#define AppVersion` w `instalator.iss` - zawsze obie).
 
 ## Język i styl
 
@@ -47,5 +47,9 @@ miejsce na pliki z Actions jest wspólne dla konta (0,5 GB) i bywa pełne przez 
   tego czasu, zegar ZATRZYMANY na pełnym czasie (`apply_preset`) - operator klika Start. Własny usuwa prawy przycisk.
   Przebudowa siatki (`_rebuild_presets`): wyjęty przycisk `hide()` + `setParent(None)` przed `deleteLater` - inaczej
   leżał na podglądzie. Duże przyciski: `clock_qss` (#BigStart, #Big, #Preset, #PresetAdd) na oknie sterowania.
+- **Koniec czasu (1.2, prośba właściciela)**: ustawienia `warn_min` (0-60, domyślnie 2; 0 = bez końcówki),
+  `warn_color` (domyślnie `WARN` żółty), `over_color` (domyślnie `OVER` czerwony; też stan „done” bez minusa).
+  `timer_display(..., warn_ms)`, `clock_color` czyta kolory z `opt`. Wybór kolorów jak tło / cyfry (`WARN_COLORS`,
+  `OVER_COLORS` + „Inny kolor…”); aktywne tylko przy odliczaniu z włączoną zmianą koloru (`_enable_controls`).
 - `theme.py` i `screens.py` skopiowane z Presentera - wygląd ma zostać spójny z Presenterem.
 - Błędy do dziennika (`from .log import log`), szerokie `except` tylko świadomie.
