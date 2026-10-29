@@ -3,4 +3,4 @@
 Osobny program firmy GALLEY (na bazie zegara z GALLEY Presentation Manager). Bez ciężkich importów.
 """
 APP_NAME = "GALLEY Zegar"
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"

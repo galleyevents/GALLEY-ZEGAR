@@ -5,6 +5,7 @@ Program dla Windows: **zegar czasu wystąpienia na pełnym ekranie** na jednolit
 ## Jak działa
 
 - **Pierwszy ekran – sterowanie:** podgląd tego, co widać na ekranie zegara, przyciski **Start / Pauza**, **Resetuj zegar**, **−1 min / +1 min**. Zegar **liczy w górę** albo **odlicza** czas wystąpienia (np. 15 min); po czasie może liczyć dalej na minusie.
+- **Gotowe czasy (od 1.1):** przyciski **5 / 10 / 15 / 30 min** – jedno kliknięcie ustawia odliczanie od tego czasu i zatrzymuje zegar na pełnym czasie (potem Start). **+ Własny…** dodaje własny czas (np. 20 albo 45 min, zapamiętany); własny usuwa się prawym przyciskiem. Przyciski sterowania czasem są duże i czytelne.
 - **Wygląd:** tło (zielone albo niebieskie – oba do kluczowania – czarne albo dowolny kolor), kolor cyfr (białe, czarne, złote albo dowolny), wielkość cyfr, ostrzeżenia (ostatnie 2 minuty na żółto, po czasie na czerwono i mruga), podpis nad zegarem („Pozostało”, „Po czasie”). Ustawienia są zapamiętywane.
 - **Drugi ekran – zegar:** przy starcie zegar sam pojawia się na pełnym ekranie na drugim monitorze (wybór monitora w części „Ekran zegara”). **Schowaj zegar / Pokaż zegar na ekranie** (F11). Przy jednym monitorze zegar zasłoni okno sterowania – **Esc** na zegarze go chowa.
 - **Klawisze:** spacja – start / pauza, T – resetuj zegar, + / − – minuta, F11 – ekran zegara.

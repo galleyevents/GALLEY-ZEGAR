@@ -14,8 +14,8 @@ import sys
 from PySide6.QtCore import QElapsedTimer, QRectF, QSettings, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QGuiApplication, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QGridLayout,
-                               QHBoxLayout, QMainWindow, QPushButton, QRadioButton, QSlider, QSpinBox,
-                               QVBoxLayout, QWidget)
+                               QHBoxLayout, QInputDialog, QMainWindow, QMenu, QPushButton, QRadioButton, QSlider,
+                               QSpinBox, QVBoxLayout, QWidget)
 
 from . import APP_NAME, APP_VERSION, utils
 from .log import log
@@ -37,8 +37,48 @@ DEFAULTS = {"mode": "down", "limit_min": 15, "overtime": True, "bg": BACKGROUNDS
             "fg": DIGITS[0][1], "size": 34, "warn": True, "caption": False, "screen": ""}
 
 
+# 1.1 (prośba właściciela): gotowe czasy jednym kliknięciem + własne presety (zapamiętane)
+BUILTIN_PRESETS = (5, 10, 15, 30)
+PRESETS_KEY = "presets"              # własne presety: minuty po przecinku, np. "20,45"
+PRESET_COLUMNS = 6
+
+
 def settings():
     return QSettings(utils.SETTINGS_ORG, utils.SETTINGS_APP)
+
+
+def load_custom_presets():
+    """Własne presety (bez wbudowanych i powtórek), rosnąco; śmieci w ustawieniach pomijane."""
+    raw = settings().value(PRESETS_KEY, "") or ""
+    out = set()
+    for part in str(raw).split(","):
+        try:
+            m = int(part.strip())
+        except ValueError:
+            continue
+        if 1 <= m <= 600 and m not in BUILTIN_PRESETS:
+            out.add(m)
+    return sorted(out)
+
+
+def save_custom_presets(minutes):
+    settings().setValue(PRESETS_KEY, ",".join(str(m) for m in sorted(set(minutes))))
+
+
+def clock_qss(t):
+    """Duże, czytelne przyciski sterowania czasem (1.1) - kolory z motywu (jasny / ciemny)."""
+    return f"""
+QPushButton#Big {{ font-size: 20px; font-weight: 600; min-height: 60px; padding: 6px 14px; }}
+QPushButton#BigStart {{ font-size: 24px; font-weight: 700; min-height: 60px; padding: 6px 18px;
+    background: {t['brass']}; color: {t['on_brass']}; border: 1px solid {t['brass']}; border-radius: 6px; }}
+QPushButton#BigStart:hover {{ background: {t['brass_hover']}; border-color: {t['brass_hover']}; }}
+QPushButton#BigStart:focus {{ border: 2px solid {t['ink']}; }}
+QPushButton#Preset {{ font-size: 18px; font-weight: 600; min-height: 48px; padding: 4px 10px; }}
+QPushButton#Preset:checked {{ background: {t['brass_soft']}; border: 2px solid {t['brass']}; color: {t['ink']}; }}
+QPushButton#PresetAdd {{ font-size: 16px; min-height: 48px; padding: 4px 10px; border: 1px dashed {t['ink3']};
+    background: transparent; color: {t['ink2']}; }}
+QPushButton#PresetAdd:hover {{ border-color: {t['brass']}; color: {t['ink']}; }}
+"""
 
 
 def load_options():
@@ -192,6 +232,8 @@ class ClockWindow(QMainWindow):
         self._blink.start()
         self.output = ClockView(self, output=True)
         self._build()
+        from .theme import T
+        self.setStyleSheet(clock_qss(T))    # duże przyciski sterowania czasem (1.1)
         self.refresh_screens()
         self._sync_controls()
         self._tick = QTimer(self)
@@ -223,8 +265,9 @@ class ClockWindow(QMainWindow):
         self.preview = ClockView(self)
         left.addWidget(self.preview)
         row = QHBoxLayout()
+        row.setSpacing(10)
         self.btn_start = QPushButton("Start")
-        self.btn_start.setObjectName("Primary")
+        self.btn_start.setObjectName("BigStart")
         self.btn_start.setToolTip("Start / pauza (spacja)")
         self.btn_start.clicked.connect(self.toggle)
         self.btn_reset = QPushButton("Resetuj zegar")
@@ -237,9 +280,19 @@ class ClockWindow(QMainWindow):
         self.btn_plus.setToolTip("Odliczanie: dłuższy czas wystąpienia; w górę: zegar do przodu (+)")
         self.btn_plus.clicked.connect(lambda: self.adjust(+1))
         for b in (self.btn_start, self.btn_reset, self.btn_minus, self.btn_plus):
-            b.setMinimumHeight(44)
+            if b is not self.btn_start:
+                b.setObjectName("Big")
+            b.setMinimumHeight(60)
             row.addWidget(b, 2 if b is self.btn_start else 1)
         left.addLayout(row)
+        left.addSpacing(6)
+        left.addWidget(label("Gotowe czasy (odliczanie)", "Section"))
+        self.preset_grid = QGridLayout()
+        self.preset_grid.setSpacing(8)
+        self.preset_buttons = {}
+        left.addLayout(self.preset_grid)
+        left.addWidget(label("Kliknięcie ustawia odliczanie od tego czasu i zatrzymuje zegar na pełnym czasie – "
+                             "potem Start. Własny preset usuniesz prawym przyciskiem.", "Muted", wrap=True))
         left.addStretch(1)
         lay.addLayout(left, 3)
 
@@ -312,7 +365,8 @@ class ClockWindow(QMainWindow):
         right.addWidget(label("Spacja: start / pauza · T: resetuj zegar · + / −: minuta · F11: ekran zegara",
                               "Muted", wrap=True))
         lay.addLayout(right, 2)
-        self.resize(1100, 560)
+        self._rebuild_presets()
+        self.resize(1200, 640)
 
     def _sync_controls(self):
         o = self.opt
@@ -331,7 +385,81 @@ class ClockWindow(QMainWindow):
         down = o["mode"] == "down"
         self.sp_min.setEnabled(down)
         self.cb_over.setEnabled(down)
+        self._mark_preset()
         self._update_views()
+
+    # ---- presety czasu (1.1) ---------------------------------------------------------
+    def presets(self):
+        return sorted(set(BUILTIN_PRESETS) | set(load_custom_presets()))
+
+    def _rebuild_presets(self):
+        while self.preset_grid.count():
+            w = self.preset_grid.takeAt(0).widget()
+            if w is not None:
+                # wyjęty z układu przycisk zostaje dzieckiem okna aż do usunięcia - chowamy go od razu,
+                # inaczej przez chwilę leżał na podglądzie zegara
+                w.hide()
+                w.setParent(None)
+                w.deleteLater()
+        self.preset_buttons = {}
+        custom = set(load_custom_presets())
+        items = self.presets()
+        for i, m in enumerate(items):
+            b = QPushButton(f"{m} min")
+            b.setObjectName("Preset")
+            b.setCheckable(True)
+            b.setToolTip(f"Odliczanie od {m} min" + (" (własny – prawy przycisk: usuń)" if m in custom else ""))
+            b.clicked.connect(lambda _=False, m=m: self.apply_preset(m))
+            if m in custom:
+                b.setContextMenuPolicy(Qt.CustomContextMenu)
+                b.customContextMenuRequested.connect(lambda _pos, m=m, b=b: self._preset_menu(m, b))
+            self.preset_buttons[m] = b
+            self.preset_grid.addWidget(b, i // PRESET_COLUMNS, i % PRESET_COLUMNS)
+        add = QPushButton("+ Własny…")
+        add.setObjectName("PresetAdd")
+        add.setToolTip("Dodaj własny gotowy czas, np. 20 albo 45 minut")
+        add.clicked.connect(lambda: self.add_preset())
+        self.btn_add_preset = add
+        n = len(items)
+        self.preset_grid.addWidget(add, n // PRESET_COLUMNS, n % PRESET_COLUMNS)
+        self._mark_preset()
+
+    def _mark_preset(self):
+        for m, b in getattr(self, "preset_buttons", {}).items():
+            b.setChecked(self.opt["mode"] == "down" and self.opt["limit_min"] == m)
+
+    def apply_preset(self, minutes):
+        """Odliczanie od `minutes`, zegar zatrzymany na pełnym czasie (operator klika Start)."""
+        self.opt["mode"] = "down"
+        self.opt["limit_min"] = max(1, min(600, int(minutes)))
+        self.model.watch.pause()
+        self.model.reset()
+        log.info("Preset: %d min", self.opt["limit_min"])
+        self._sync_controls()
+        self._save()
+
+    def add_preset(self, minutes=None):
+        if minutes is None:
+            minutes, ok = QInputDialog.getInt(self, "Własny preset", "Czas wystąpienia w minutach:",
+                                              self.opt["limit_min"], 1, 600)
+            if not ok:
+                return False
+        minutes = max(1, min(600, int(minutes)))
+        if minutes not in BUILTIN_PRESETS:
+            save_custom_presets(load_custom_presets() + [minutes])
+            log.info("Dodany preset: %d min", minutes)
+        self._rebuild_presets()
+        return True
+
+    def remove_preset(self, minutes):
+        save_custom_presets([m for m in load_custom_presets() if m != minutes])
+        log.info("Usunięty preset: %d min", minutes)
+        self._rebuild_presets()
+
+    def _preset_menu(self, minutes, button):
+        menu = QMenu(self)
+        menu.addAction(f"Usuń preset {minutes} min", lambda: self.remove_preset(minutes))
+        menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
 
     @staticmethod
     def _select_color(combo, value):
@@ -366,6 +494,7 @@ class ClockWindow(QMainWindow):
         o["caption"] = self.cb_caption.isChecked()
         self.sp_min.setEnabled(o["mode"] == "down")
         self.cb_over.setEnabled(o["mode"] == "down")
+        self._mark_preset()
         self._save()
 
     def _save(self):
@@ -400,6 +529,7 @@ class ClockWindow(QMainWindow):
             self.sp_min.blockSignals(True)
             self.sp_min.setValue(self.opt["limit_min"])
             self.sp_min.blockSignals(False)
+            self._mark_preset()
             self._save()
         self._update_views()
 

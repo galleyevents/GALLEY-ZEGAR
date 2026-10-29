@@ -123,3 +123,45 @@ def test_instalator_osobny_od_presentera():
     assert '#define AppExe "GalleyZegar.exe"' in iss and "--zegar" not in iss
     from galley_zegar import APP_VERSION
     assert f'#define AppVersion "{APP_VERSION}"' in iss
+
+
+def test_presety_czasu(app, zegar):
+    """1.1: gotowe czasy 5 / 10 / 15 / 30 min jednym kliknięciem + własne presety (zapamiętane)."""
+    from galley_zegar import app as z
+    assert [b.text() for b in zegar.preset_buttons.values()] == ["5 min", "10 min", "15 min", "30 min"]
+    assert zegar.preset_buttons[15].isChecked()                         # domyślnie 15 min
+    zegar.btn_start.click()
+    zegar.model.watch.adjust(90_000)
+    zegar.preset_buttons[30].click()                                    # preset: odliczanie, zegar stoi
+    assert not zegar.model.running and zegar.model.display()[1] == "00:30:00"
+    assert zegar.preset_buttons[30].isChecked() and not zegar.preset_buttons[15].isChecked()
+    assert zegar.sp_min.value() == 30 and z.load_options()["limit_min"] == 30
+    zegar.btn_plus.click()                                              # 31 min - żaden preset
+    assert not any(b.isChecked() for b in zegar.preset_buttons.values())
+    # własne presety: dodane, posortowane, zapamiętane, bez powtórek i bez wbudowanych
+    assert zegar.add_preset(45) and zegar.add_preset(20) and zegar.add_preset(45) and zegar.add_preset(10)
+    assert z.load_custom_presets() == [20, 45]
+    assert list(zegar.preset_buttons) == [5, 10, 15, 20, 30, 45]
+    zegar.preset_buttons[45].click()
+    assert zegar.model.display()[1] == "00:45:00"
+    zegar.remove_preset(20)
+    assert list(zegar.preset_buttons) == [5, 10, 15, 30, 45] and z.load_custom_presets() == [45]
+    assert zegar.btn_add_preset.text() == "+ Własny…"
+
+
+def test_duze_przyciski_sterowania(app, zegar):
+    """1.1: przyciski sterowania czasem duże i czytelne (wysokość i wielkość napisu)."""
+    for b in (zegar.btn_start, zegar.btn_reset, zegar.btn_minus, zegar.btn_plus):
+        assert b.height() >= 60, b.text()
+    assert zegar.btn_start.font().pixelSize() >= 22 or zegar.btn_start.fontInfo().pixelSize() >= 22
+    assert all(b.height() >= 48 for b in zegar.preset_buttons.values())
+
+
+def test_przebudowa_presetow_nie_zostawia_przyciskow(app, zegar):
+    """Po dodaniu / usunięciu presetu w oknie są tylko aktualne przyciski (stare nie leżą na podglądzie)."""
+    from PySide6.QtWidgets import QPushButton
+    zegar.add_preset(20)
+    zegar.remove_preset(20)
+    pump(app, 0.1)
+    shown = [b.text() for b in zegar.findChildren(QPushButton) if b.isVisibleTo(zegar) and b.objectName() == "Preset"]
+    assert sorted(shown) == sorted(["5 min", "10 min", "15 min", "30 min"])

@@ -6,7 +6,7 @@ ekranie na jednolitym tle do kluczowania. Zbudowany na bazie zegara z repozytori
 z własnym instalatorem i repozytorium - NIE tryb Presentera (próba jako `--zegar` w Presenterze, 3.14-beta.5,
 została wycofana).
 
-Aktualna wersja: **1.0** (`galley_zegar/__init__.py` `APP_VERSION` i `#define AppVersion` w `instalator.iss` - zawsze obie).
+Aktualna wersja: **1.1** (`galley_zegar/__init__.py` `APP_VERSION` i `#define AppVersion` w `instalator.iss` - zawsze obie).
 
 ## Język i styl
 
@@ -42,5 +42,10 @@ miejsce na pliki z Actions jest wspólne dla konta (0,5 GB) i bywa pełne przez 
 - **Monitory**: przy starcie zegar sam na pierwszym monitorze innym niż okno sterowania (`_auto_show`); zapamiętany
   monitor po nazwie Qt. Esc na ekranie zegara chowa go (gdy zasłania sterowanie). Do sprawdzenia na sprzęcie:
   skalowanie 125 / 150 %, kluczowanie w vMixie (krawędzie cyfr).
+- **Presety czasu (1.1, prośba właściciela)**: wbudowane `BUILTIN_PRESETS` (5, 10, 15, 30) + własne w ustawieniu
+  `presets` („20,45”; `load_custom_presets` / `save_custom_presets`, bez powtórek i wbudowanych). Klik = odliczanie od
+  tego czasu, zegar ZATRZYMANY na pełnym czasie (`apply_preset`) - operator klika Start. Własny usuwa prawy przycisk.
+  Przebudowa siatki (`_rebuild_presets`): wyjęty przycisk `hide()` + `setParent(None)` przed `deleteLater` - inaczej
+  leżał na podglądzie. Duże przyciski: `clock_qss` (#BigStart, #Big, #Preset, #PresetAdd) na oknie sterowania.
 - `theme.py` i `screens.py` skopiowane z Presentera - wygląd ma zostać spójny z Presenterem.
 - Błędy do dziennika (`from .log import log`), szerokie `except` tylko świadomie.
